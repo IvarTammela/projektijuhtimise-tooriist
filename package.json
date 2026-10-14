@@ -1,0 +1,14 @@
+{
+  "name": "projektijuhtimise-tooriist",
+  "version": "1.0.0",
+  "description": "AI-põhine projektijuhtimise tööriist kasutajalugude ja backlog’i koostamiseks",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test tests/flow.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
