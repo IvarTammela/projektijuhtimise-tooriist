@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="et">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Projektijuhtimise tööriist</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <h2>Projektid</h2>
+    <ul id="project-list"></ul>
+    <form id="new-project">
+      <input name="name" placeholder="Projekti nimi" required>
+      <textarea name="description" rows="3" placeholder="Kliendi idee vabas vormis"></textarea>
+      <button type="submit">Loo projekt</button>
+    </form>
+  </aside>
+
+  <main id="main">
+    <p class="muted">Vali projekt või loo uus.</p>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
