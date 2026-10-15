@@ -70,8 +70,10 @@ form { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
 .stagebar button.current { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .stagebar button.done { color: var(--ok); }
 
-.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
-@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+/* Vestlus ja backlog on kõrvuti. Ühte veergu kukub alles päris kitsal ekraanil (telefon). */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.layout > .panel:first-child { max-height: 80vh; overflow-y: auto; }
+@media (max-width: 560px) { .layout { grid-template-columns: 1fr; } .layout > .panel:first-child { max-height: none; } }
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
 
 .msg { padding: 8px 10px; border-radius: 8px; margin: 6px 0; white-space: pre-wrap; }

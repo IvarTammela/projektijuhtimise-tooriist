@@ -105,6 +105,9 @@ $('#new-project').addEventListener('submit', (e) => {
     form.reset();
     await loadProjects();
     setView(view);
+    // Vestlus algab ise: AI esitab kohe täpsustavad küsimused.
+    const res = await api('POST', `/api/projects/${view.id}/ai`, { task: 'questions' });
+    setView(res.project);
   });
 });
 
@@ -143,20 +146,34 @@ function renderStageBar(v) {
 // ---- Vestlus ----
 
 function renderChat(v) {
-  const messages = v.messages.map((m) => el('div', { class: `msg ${m.role}` }, m.text || '(tühi)'));
+  // Juba kinnitatud küsimustiku vastused jäävad vestlusesse nähtavale.
+  const answered = v.answers.filter((a) => a.answer).flatMap((a) => [
+    el('div', { class: 'msg ai' }, a.question),
+    el('div', { class: 'msg user' }, a.answer),
+  ]);
+  const messages = [
+    ...v.messages.map((m) => el('div', { class: `msg ${m.role}` }, m.text || '(tühi)')),
+    ...answered,
+  ];
   const proposals = v.proposals.map((p) => renderProposal(v, p));
   const next = el('div', { class: 'next' }, v.nextSteps.map((step) => el('button', {
     disabled: state.busy,
     onclick: () => run(async () => runStep(v, step)),
   }, step.label)));
 
-  const textarea = el('textarea', { rows: 2, placeholder: 'Kirjuta vabalt (kliendi vastus, täpsustus, küsimus)' });
+  const textarea = el('textarea', { id: 'chat-input', rows: 2, placeholder: 'Kirjuta vabalt (kliendi vastus, täpsustus, küsimus)' });
   const sendBtn = el('button', {
     class: 'primary',
     disabled: state.busy,
     onclick: () => {
       const text = textarea.value.trim();
       if (!text) return;
+      // Kui küsimustik on pooleli, on vabatekst vastus jooksvale küsimusele.
+      const open = pendingQuestionnaire(v);
+      if (open) {
+        answerQuestion(v, open.p, open.d, open.idx, text);
+        return;
+      }
       run(async () => {
         await api('POST', `/api/projects/${v.id}/messages`, { text });
         setView(await api('POST', `/api/projects/${v.id}/ai`, { text }));
@@ -186,6 +203,29 @@ async function runStep(v, step) {
   const storyId = needsStory ? state.selectedStoryId || undefined : undefined;
   const res = await api('POST', `/api/projects/${v.id}/ai`, { task: step.action.task, storyId });
   setView(res.project);
+}
+
+// Vastab ühele küsimustiku küsimusele. Kui kõik küsimused on vastatud, kinnitatakse vastused
+// ja vestlus pakub järgmise sammu.
+function answerQuestion(v, p, d, idx, answer) {
+  d.questions[idx].answer = answer;
+  if (d.questions.some((q) => !q.answer)) {
+    render();
+    return;
+  }
+  run(async () => {
+    setView(await api('POST', `/api/projects/${v.id}/apply`, { proposalId: p.id, edited: { questions: d.questions } }));
+    delete state.drafts[p.id];
+  });
+}
+
+// Leiab ootel küsimustiku, kus on vastamata küsimus. Vabatekst vestluskastist vastab sellele.
+function pendingQuestionnaire(v) {
+  const p = v.proposals.find((x) => x.task === 'questions');
+  if (!p) return null;
+  const d = draftOf(p);
+  const idx = d.questions.findIndex((q) => !q.answer);
+  return idx === -1 ? null : { p, d, idx };
 }
 
 // Ettepanekud. Kasutaja muudab koopiat (drafts), kinnitab või loobub.
@@ -220,30 +260,26 @@ function renderProposal(v, p) {
   const body = [];
 
   if (p.task === 'questions') {
-    d.questions.forEach((q, i) => {
-      body.push(el('div', { class: 'card-item' }, [
-        el('div', {}, q.text),
-        el('div', { class: 'chips' }, [
-          ...q.options.map((o) => el('button', {
-            class: q.answer === o ? 'primary' : '',
-            onclick: () => { q.answer = o; render(); },
-          }, o)),
-          el('button', {
-            class: q.answer === '(vahele jäetud)' ? 'primary' : '',
-            onclick: () => { q.answer = '(vahele jäetud)'; render(); },
-          }, 'Jäta vahele'),
-          el('button', {
-            onclick: () => {
-              const own = prompt('Sinu vastus:');
-              if (own && own.trim()) { q.answer = own.trim(); render(); }
-            },
-          }, 'Muu (kirjutan ise)'),
-        ]),
-        q.answer ? el('p', { class: 'muted' }, `Vastus: ${q.answer}`) : null,
-      ]));
+    // Chati-põhine küsimustik: küsimused tulevad ükshaaval, vastus läheb vestlusesse.
+    d.questions.forEach((q) => {
+      if (q.answer) {
+        body.push(el('div', { class: 'msg ai' }, q.text));
+        body.push(el('div', { class: 'msg user' }, q.answer));
+      }
     });
-    body.push(el('p', { class: 'muted' }, 'Vali variant või kirjuta oma vastus ja kinnita. Vabateksti saad saata ka vestluse kastist.'));
-    body.push(proposalActions(v, p, { questions: d.questions }));
+    const idx = d.questions.findIndex((q) => !q.answer);
+    if (idx !== -1) {
+      const q = d.questions[idx];
+      body.push(el('div', { class: 'msg ai' }, q.text));
+      body.push(el('div', { class: 'chips' }, [
+        ...q.options.map((o) => el('button', { disabled: state.busy, onclick: () => answerQuestion(v, p, d, idx, o) }, o)),
+        el('button', { disabled: state.busy, onclick: () => {
+          const box = document.querySelector('#chat-input');
+          if (box) { box.placeholder = 'Kirjuta oma vastus ja vajuta Saada'; box.focus(); }
+        } }, 'Muu (kirjutan ise)'),
+        el('button', { disabled: state.busy, onclick: () => answerQuestion(v, p, d, idx, '(vahele jäetud)') }, 'Jäta vahele'),
+      ]));
+    }
   }
 
   if (p.task === 'roles') {
