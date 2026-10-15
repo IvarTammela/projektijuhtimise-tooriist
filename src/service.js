@@ -103,6 +103,7 @@ function view(project) {
     mvpStoryId: project.mvpStoryId,
     proposals: project.proposals.filter((p) => p.status === 'pending'),
     messages: project.messages.slice(-100),
+    suggestions: (project.suggestions || []).map((o) => ({ ...o, code: storyCode(project, o.storyId) })),
     canUndo: project.history.length > 0,
     nextSteps: nextSteps(project),
   };
@@ -190,6 +191,10 @@ async function propose(project, task, input = {}) {
     }
   }
   const raw = await askAI(task, contextFor(project, extra));
+  if (task === 'refine') {
+    // Soovitus on täidetud, kui selle loo kohta küsitakse ettepanek.
+    project.suggestions = (project.suggestions || []).filter((x) => x.storyId !== storyId);
+  }
   const payload = validatePayload(task, raw, project);
   if (task === 'chat') {
     // Vaba vestlus ei loo ettepanekut ega muuda andmeid, AI vastus läheb ainult vestlusse.
@@ -354,15 +359,15 @@ function apply(project, proposalId, edited = {}) {
       applyMockupAndCriteria(project, payload.storyId, payload.criteria, payload.mockup);
       break;
     case 'refine': {
-      if (payload.otherStoryChanges.length > 0) {
-        throw new ValidationError('Täpsustus puudutab teisi lugusid. Rakenda need eraldi ettepanekutena.');
-      }
       const s = findStory(project, payload.storyId);
       if (payload.changes.role) s.role = payload.changes.role;
       if (payload.changes.action) s.action = payload.changes.action;
       if (payload.changes.benefit) s.benefit = payload.changes.benefit;
       if (payload.changes.criteria) s.criteria = criteriaFrom(payload.changes.criteria);
       if (payload.mockup) applyMockupAndCriteria(project, s.id, null, payload.mockup);
+      // Teisi lugusid ei muudeta. Kui täpsustus võib neid mõjutada, jäävad need eraldi soovitusteks:
+      // kasutaja saab iga loo jaoks küsida eraldi ettepaneku.
+      suggestOthers(project, s.id, payload.otherStoryChanges);
       break;
     }
     case 'groom':
@@ -394,6 +399,20 @@ function reject(project, proposalId) {
     throw new ValidationError('Ettepanekut ei leitud või see on juba töödeldud.');
   }
   proposal.status = 'rejected';
+}
+
+// Salvestab soovitused teiste lugude kohta (ainult olemasolevad lood, mitte täpsustatav lugu ise).
+function suggestOthers(project, sourceId, changes) {
+  const valid = (changes || []).filter((o) => o.storyId !== sourceId && project.stories.some((x) => x.id === o.storyId));
+  if (valid.length === 0) return;
+  project.suggestions = [...(project.suggestions || []).filter((x) => !valid.some((o) => o.storyId === x.storyId)), ...valid];
+  const codes = valid.map((o) => storyCode(project, o.storyId));
+  project.messages.push({ role: 'ai', text: `Täpsustus võib mõjutada ka lugusid ${codes.join(', ')}. Neid ma ei muuda ise: saad iga loo kohta eraldi ettepaneku küsida.`, ts: now() });
+}
+
+function storyCode(project, storyId) {
+  const index = project.stories.findIndex((x) => x.id === storyId);
+  return `US-${(project.stories[index] && project.stories[index].seq) || index + 1}`;
 }
 
 function newStory(s, origin, project) {
@@ -522,6 +541,17 @@ function setOrder(project, order) {
   project.stories = order.map((x) => map.get(x));
 }
 
+// Võtab varasema mockup’i versiooni tagasi: see lisatakse uue viimase versioonina, ajalugu säilib.
+function restoreMockupVersion(project, mockupId, versionId) {
+  const m = project.mockups.find((x) => x.id === mockupId);
+  const version = m && m.versions.find((x) => x.id === versionId);
+  if (!version) {
+    throw new ValidationError('Mockup’i versiooni ei leitud.');
+  }
+  snapshot(project);
+  m.versions.push({ id: id('v'), createdAt: now(), root: JSON.parse(JSON.stringify(version.root)) });
+}
+
 function setMvp(project, storyId) {
   if (storyId !== null) findStory(project, storyId);
   snapshot(project);
@@ -545,6 +575,7 @@ module.exports = {
   removeStory,
   setOrder,
   setMvp,
+  restoreMockupVersion,
   nextSteps,
   snapshot,
   findStory,

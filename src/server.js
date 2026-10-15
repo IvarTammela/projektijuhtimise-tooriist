@@ -225,6 +225,10 @@ function createApp({ dataFile }) {
       return send(res, 200, withProject(pid, (p) => service.removeStory(p, sid)));
     }
 
+    if (sub === 'mockups' && sid && parts[5] === 'restore' && method === 'POST') {
+      return send(res, 200, withProject(pid, (p) => service.restoreMockupVersion(p, sid, body.versionId)));
+    }
+
     if (sub === 'order' && method === 'PUT') {
       return send(res, 200, withProject(pid, (p) => service.setOrder(p, body.order)));
     }

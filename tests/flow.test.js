@@ -178,3 +178,32 @@ test('vaba vestlus ei muuda backlog’i ega loo ettepanekut', async () => {
   assert.equal(JSON.stringify(project.stories), before);
   assert.ok(project.messages.length >= 1);
 });
+
+test('täpsustus rakendub valitud loole ja teisi lugusid mõjutavad muudatused jäävad soovitusteks', async () => {
+  const project = service.createProject({ name: 'Klubi', description: 'x' });
+  const s1 = service.addStoryManually(project, { role: 'külastajana', action: 'a', benefit: 'b', criteria: ['c1 on nähtav.'] });
+  const s2 = service.addStoryManually(project, { role: 'administraatorina', action: 'c', benefit: 'd', criteria: ['c2 on nähtav.'] });
+  const proposal = await service.propose(project, 'refine', { storyId: s1.id, text: 'x' });
+  proposal.payload.otherStoryChanges = [{ storyId: s2.id, description: 'Uuenda hinnakirja' }, { storyId: s1.id, description: 'ise' }];
+  const before = JSON.stringify(project.stories.find((s) => s.id === s2.id));
+  service.apply(project, proposal.id, {});
+  assert.equal(JSON.stringify(project.stories.find((s) => s.id === s2.id)), before, 'teine lugu ei muutu');
+  assert.equal(project.suggestions.length, 1, 'ainult teise loo soovitus jääb alles');
+  assert.equal(project.suggestions[0].storyId, s2.id);
+  assert.equal(service.view(project).suggestions[0].code, 'US-2');
+});
+
+test('mockup’i varasem versioon taastatakse uue versioonina ja ajalugu säilib', async () => {
+  const project = service.createProject({ name: 'Klubi', description: 'x' });
+  const s = service.addStoryManually(project, { role: 'külastajana', action: 'a', benefit: 'b', criteria: ['c on nähtav.'] });
+  const first = await service.propose(project, 'criteria', { storyId: s.id });
+  service.apply(project, first.id, {});
+  const second = await service.propose(project, 'refine', { storyId: s.id, text: 'x' });
+  second.payload.mockup = { type: 'page', label: 'Uus', children: [] };
+  service.apply(project, second.id, {});
+  const m = project.mockups[0];
+  assert.equal(m.versions.length, 2);
+  service.restoreMockupVersion(project, m.id, m.versions[0].id);
+  assert.equal(m.versions.length, 3, 'vana ajalugu säilib');
+  assert.equal(m.versions[2].root.label, m.versions[0].root.label, 'taastatud versioon on uus viimane');
+});

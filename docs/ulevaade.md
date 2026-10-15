@@ -7,14 +7,14 @@
 - Backlog: käsitsi lisamine, muutmine, kustutamine ja järjestamine, MVP joon, staatused, valmisoleku definitsioon (näitab, mis puudu on), tagasivõtmine, Markdown ja CSV eksport.
 - Inimese kontroll: ükski AI ettepanek ei jõua backlog’i ilma kinnituseta ja täpsustus muudab ainult valitud lugu (server kontrollib).
 - Turvalisus: AI võti on serveris, AI päringud käivad läbi serveri, vastuse kuju kontrollitakse, mockup kuvatakse tekstina lubatud komponentide nimekirjast.
-- Testid: 12 automaattesti (mock-provideriga), lisaks kontrollisin päris AI-ga intervjuud, rolle, lugusid, kriteeriume ja mockup’i.
+- Testid: 14 automaattesti (mock-provideriga), lisaks kontrollisin päris AI-ga intervjuud, rolle, lugusid, kriteeriume ja mockup’i.
 
 ## Mis jäi pooleli või on piiratud
 
-- **Päris AI-ga ei ole läbi testitud** kliendi täpsustust ja groomimise AI ülevaatust. Need töötavad mock-provideriga ja automaattestidega.
+- Kliendi täpsustust ja groomimise ülevaatust olen päris AI-ga kontrollinud API kaudu (täpsustus rakendub valitud lool, teiste lugude muudatused jäävad soovitusteks, ülevaade leidis ühendamise ja jagamise). Brauseris olen neid läbi klõpsanud ainult mock-provideriga, nii et päris AI-ga kuvamist ei ole ma silmaga kontrollinud.
 - **Intervjuu küsimustel ei ole vastusevariante.** Projektijuht kirjutab ise, mida klient vastas (otsus on tehtud kasutuskogemuse põhjal). Ülesande kirjeldus nõudis variante nuppudena, see on tahtlik erinevus.
 - Järjestamine on ▲ ▼ nuppudega, mitte lohistades.
-- Mockup’i varasemad versioonid salvestuvad, aga liideses puudub tagasi minemise nupp (versioonid on andmetes olemas).
+- Mockup’i versioone saab valikust vaadata ja varasema võib taastada uue versioonina. Taastamist ei ole ma päris AI-ga brauseris käsitsi katsetanud, ainult automaattestiga.
 - GitHub Issues’i või Jira eksporti ei ole.
 - Lisavõimalustest on olemas Markdown ja CSV eksport. Story map, jagatav vaatamislink ja kõnesisend puuduvad.
 - Ühe kasutaja jaoks: kasutajakontosid ei ole.

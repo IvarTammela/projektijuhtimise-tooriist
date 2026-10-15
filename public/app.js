@@ -236,6 +236,14 @@ function renderChat(v) {
       ...messages,
       ...proposals,
       state.thinking ? el('div', { class: 'msg ai thinking' }, 'AI mõtleb…') : null,
+      // Täpsustus võib mõjutada teisi lugusid: neid ei muudeta ise, vaid pakutakse eraldi ettepanekuna.
+      ...(idle ? (v.suggestions || []).map((sg) => el('button', {
+        disabled: state.busy,
+        onclick: () => run(async () => {
+          state.selectedStoryId = sg.storyId;
+          setView((await api('POST', `/api/projects/${v.id}/ai`, { task: 'refine', storyId: sg.storyId, text: sg.description })).project);
+        }),
+      }, `Paku muudatus loole ${sg.code}: ${sg.description.slice(0, 70)}`)) : []),
       steps.length ? next : null,
     ]),
     el('div', { class: 'chat-input-row' }, [textarea, sendBtn]),
@@ -595,13 +603,23 @@ function renderMockupPanel(v) {
     return el('div', { class: 'panel', style: 'margin-top:16px' }, el('p', { class: 'muted' }, 'Vali backlog’ist lugu, et näha mockup’i ja anda kliendi täpsustus.'));
   }
   const mockup = v.mockups.find((m) => m.storyId === story.id);
-  const latest = mockup ? mockup.versions[mockup.versions.length - 1] : null;
+  const versions = mockup ? mockup.versions : [];
+  // Vaikimisi näidatakse viimast versiooni, aga varasema juurde saab valikust tagasi minna.
+  const chosen = state.mockupVersion && state.mockupVersion.storyId === story.id ? state.mockupVersion.index : versions.length - 1;
+  const shown = versions[chosen] || null;
   const input = el('textarea', { rows: 2, placeholder: 'Kliendi täpsustus selle loo kohta' });
   return el('div', { class: 'panel', style: 'margin-top:16px' }, [
-    el('h3', {}, story.title),
-    latest ? el('div', {}, [
-      el('p', { class: 'muted' }, `Versioon ${mockup.versions.length} (${new Date(latest.createdAt).toLocaleString('et-EE')})`),
-      renderMockupTree(latest.root),
+    el('h3', {}, `${story.code}: ${story.title}`),
+    shown ? el('div', {}, [
+      el('div', { class: 'row' }, [
+        el('select', { onchange: (e) => { state.mockupVersion = { storyId: story.id, index: Number(e.target.value) }; render(); } },
+          versions.map((ver, i) => el('option', { value: String(i), selected: i === chosen }, `Versioon ${i + 1} · ${new Date(ver.createdAt).toLocaleString('et-EE')}`))),
+        chosen !== versions.length - 1 ? el('button', { disabled: state.busy, onclick: () => run(async () => {
+          setView(await api('POST', `/api/projects/${v.id}/mockups/${mockup.id}/restore`, { versionId: shown.id }));
+          state.mockupVersion = null;
+        }) }, 'Taasta see versioon') : null,
+      ]),
+      renderMockupTree(shown.root),
     ]) : el('p', { class: 'muted' }, 'Mockup’i pole veel.'),
     el('div', { class: 'row' }, [input, el('button', {
       class: 'primary',
