@@ -54,15 +54,16 @@ Andmed salvestatakse faili `data/db.json`. Server ei kaota andmeid taaskäivitam
 
 ## Kasutamine
 
-1. **Loo projekt** vasakul ja kirjelda kliendi idee vabas vormis.
-2. **Juhitud vestlus** (keskel) pakub järgmise sammu nupud. Iga AI ettepanek ilmub kaardina, mida saab muuta, kinnitada või tagasi lükata.
-3. **Etapid** (ülal) näitavad, kus protsess on. Etappe saab vahele jätta ja tagasi minna.
-4. **Backlog** (paremal) näitab lugusid järjekorras. Järjestust muudad ▲ ▼ nuppudega, MVP joone märgid nupuga.
-   Lugu saab „Valmis arenduseks“ ainult siis, kui see läbib valmisoleku kontrolli. Puudu olev punkt on loetletud.
-5. **Mockup ja täpsustus** (all): vali lugu, kirjuta kliendi täpsustus ja vaata muudatusettepanekut enne rakendamist.
-   Teised lood ei muutu.
-6. **Groomimine**: „Vaata backlog üle“ leiab liiga suured, kattuvad ja mittekontrollitavad lood. Iga leidu rakendatakse või ignoreeritakse eraldi.
-7. **Võta tagasi** viimane muudatus.
+1. **Loo projekt** vasakul (ainult nimi). Vestlus alustab tervitusega: kirjelda kliendi idee vabas vormis.
+2. **AI intervjueerib.** Ta esitab ühe küsimuse korraga, ilma vastusevariantideta. Sina kirjutad, mida klient vastas (või vajutad Jäta vahele). Kui info on piisav, teatab AI sellest ise.
+3. **AI pakub sammud ise:** rollid, kasutajalood happy path’i järjekorras, soovituse, millest alustada, ning seejärel iga loo kriteeriumid ja mockup’i lugu haaval. Iga ettepanek ilmub vestluses kaardina, mida saab muuta, kinnitada või tagasi lükata.
+4. **Backlog** on vestluse all kaartidena (US-1, US-2 …). Järjestust muudad ▲ ▼ nuppudega, MVP joone märgid nupuga. Lugu saab „Valmis arenduseks“ ainult siis, kui see läbib valmisoleku kontrolli, ja puudu olev punkt on loetletud.
+5. **Kliendi täpsustus:** vali lugu ja kirjuta vestlusse täpsustus. AI näitab Enne/Pärast eelvaadet ja muudab ainult valitud lugu.
+6. **Groomimine:** „Vaata backlog üle“ leiab liiga suured, kattuvad ja mittekontrollitavad lood. Iga leidu rakendatakse või ignoreeritakse eraldi.
+7. **Vaba kirjutamine** on alati lubatud. Täpsustuste etapis valitud loo korral on see kliendi täpsustus, muul ajal vastab AI vestluses ega muuda midagi.
+8. **Võta tagasi** viimane muudatus. Backlog’i saab eksportida Markdowni või CSV-sse.
+
+Täpsem kirjeldus: [kasutusstsenaarium](docs/kasutusstsenaarium.md) ja [ülevaade](docs/ulevaade.md). Oma arendustöö backlog: [docs/arendustoo-backlog.md](docs/arendustoo-backlog.md).
 
 ## Põhimõtted
 
