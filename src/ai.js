@@ -8,7 +8,8 @@ const { spawn } = require("child_process");
 const os = require("os");
 
 const PROMPTS = {
-  questions: 'Oled projektijuht. Kliendi idee on umbmäärane. Esita 1–3 täpsustavat küsimust, igaühele 2–4 vastusevarianti. Vasta ainult JSON-iga: {"message": string, "questions": [{"text": string, "options": [string]}]}.',
+  questions: 'Oled kogenud projektijuht ja viid kliendiga intervjuud. Projektijuht ei tea, mida küsida, seega küsid sina. Esita ÜKS järgmine täpsustav küsimus (2–4 vastusevarianti), mis aitab saada infot rollide, põhitöövoo, andmete, maksete ja piirangute kohta. Arvesta juba antud vastustega (answers) ning ära korda küsimusi. Kui info on piisav, et pakkuda rollid ja kasutajalood, vasta done: true ja lühikese teatega. Vasta ainult JSON-iga: {"message": string, "done": boolean, "questions": [{"text": string, "options": [string]}]}. Kui done on true, jäta questions tühjaks.',
+  chat: 'Oled projektijuhi abiline. Kasutaja kirjutas vabalt (userText). Vasta lühidalt eesti keeles, arvestades projekti seisu (idee, rollid, lood). Ära muuda midagi. Kui ta tahab muuta konkreetset lugu, ütle, et ta valiks loo ja kirjutaks täpsustuse. Vasta ainult JSON-iga: {"message": string}.',
   roles: 'Pakkusid kasutajarollid projektile. Roll on translatiivis (nt "külastajana", "klubi liikmena"). Vasta ainult JSON-iga: {"message": string, "roles": [string]}.',
   stories: 'Kirjuta kasutajalood Connextra vormis happy path’i järjekorras. Igal loal on role (translatiivis, nt "külastajana"), action (tegevus ilma sõnata soovin, nt näha liikmepakette), benefit (kasu ilma sõnata et, nt valida endale sobiv pakett), criteria (vastuvõtukriteeriumid, igaüks jah/ei kontrollitav üks tingimus) ja viewStory (true, kui lugu puudutab vaadet). Vasta ainult JSON-iga: {"message": string, "stories": [{"role": string, "action": string, "benefit": string, "criteria": [string], "viewStory": boolean}]}.',
   priority: 'Sea lood järjekorda ja soovita, millisest alustada. Vasta ainult JSON-iga: {"message": string, "order": [storyId], "recommendedStoryId": storyId, "reason": string}.',
@@ -113,10 +114,18 @@ function callClaudeCli(system, userText) {
 
 // Mock-vastused: fikseeritud näited, et saaks rakendust testida ilma võtmeta.
 const MOCK = {
-  questions: () => ({
-    message: 'Enne lugude pakkumist täpsustan paari asja.',
-    questions: [{ text: 'Kes on rakenduse kasutajad?', options: ['Külastaja', 'Klubi liige', 'Administraator'] }],
-  }),
+  questions: (ctx) => {
+    const bank = [
+      { text: 'Kes on rakenduse kasutajad?', options: ['Külastaja', 'Klubi liige', 'Administraator'] },
+      { text: 'Kas liikmetasu makstakse rakenduses?', options: ['Jah, veebis', 'Ei, kohapeal', 'Otsustame hiljem'] },
+      { text: 'Kas vaja on ka mobiilirakendust?', options: ['Ainult veeb', 'Ka mobiil', 'Hiljem'] },
+    ];
+    if (ctx.answers.length >= bank.length) {
+      return { message: 'Mul on piisavalt infot.', done: true, questions: [] };
+    }
+    return { message: 'Täpsustan veel.', done: false, questions: [bank[ctx.answers.length]] };
+  },
+  chat: () => ({ message: 'Sain aru. Kirjuta täpsustus või vali lugu.' }),
   roles: () => ({ message: 'Pakun kolm rolli.', roles: ['külastajana', 'klubi liikmena', 'administraatorina'] }),
   stories: () => ({
     message: 'Pakun külastaja põhitöövoo põhjal lood.',

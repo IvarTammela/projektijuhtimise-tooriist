@@ -182,7 +182,12 @@ function renderChat(v) {
   ];
   const proposals = v.proposals.map((p) => renderProposal(v, p));
   // Enne kliendi ideed ei paku vestlus samme: kasutaja kirjutab esmalt oma mõtted.
-  const next = el('div', { class: 'next' }, (v.description ? v.nextSteps : []).map((step) => el('button', {
+  // Valikuid näidatakse ainult siis, kui ootel ettepanekuid pole ja AI ei tööta. Kui AI-samm ebaõnnestus,
+  // jääb alles nupp Proovi uuesti, et kasutaja ei jääks toppama.
+  const idle = v.description && v.proposals.length === 0 && !state.thinking;
+  const steps = !idle ? [] : v.nextSteps.length ? v.nextSteps
+    : v.stageTask && v.stage !== 'idea' ? [{ label: 'Proovi uuesti', action: { type: 'ai', task: v.stageTask } }] : [];
+  const next = el('div', { class: 'next' }, steps.map((step) => el('button', {
     disabled: state.busy,
     onclick: () => run(async () => runStep(v, step)),
   }, step.label)));
@@ -198,8 +203,7 @@ function renderChat(v) {
       if (!v.description) {
         run(async () => {
           setView(await api('PUT', `/api/projects/${v.id}/idea`, { text }));
-          const res = await api('POST', `/api/projects/${v.id}/ai`, { task: 'questions' });
-          setView(res.project);
+          await interview();
         });
         return;
       }
@@ -209,9 +213,13 @@ function renderChat(v) {
         answerQuestion(v, open.p, open.d, open.idx, text);
         return;
       }
+      // Vabatekst on alati lubatud. Täpsustuste etapis ja valitud loo korral on see kliendi täpsustus,
+      // muidu vestleb AI sinuga ega muuda midagi.
+      const refine = v.stage === 'refinement' && state.selectedStoryId;
       run(async () => {
         await api('POST', `/api/projects/${v.id}/messages`, { text });
-        setView(await api('POST', `/api/projects/${v.id}/ai`, { text }));
+        const body = refine ? { task: 'refine', storyId: state.selectedStoryId, text } : { task: 'chat', text };
+        setView((await api('POST', `/api/projects/${v.id}/ai`, body)).project);
       });
     },
   }, 'Saada');
@@ -221,7 +229,7 @@ function renderChat(v) {
     el('div', {}, messages.length ? messages : [el('p', { class: 'muted' }, 'Alusta järgmise sammuga.')]),
     ...proposals,
     state.thinking ? el('div', { class: 'msg ai thinking' }, 'AI mõtleb…') : null,
-    v.description ? el('h3', {}, 'Järgmine samm') : null,
+    steps.length ? el('h3', {}, 'Järgmine samm') : null,
     next,
     el('div', { class: 'row' }, [textarea, sendBtn]),
   ]);
@@ -233,6 +241,11 @@ async function runStep(v, step) {
   }
   // Loo-põhised sammud vajavad valitud lugu; kui kasutaja ei valinud, võtame backlog’i esimese.
   const needsStory = ['criteria', 'refine'].includes(step.action.task);
+  if (step.action.task === 'criteria') {
+    // Mockup tehakse lugu haaval: võtame esimese loo, millel mockup’i veel pole.
+    const pending = v.stories.find((s) => !s.hasMockup);
+    state.selectedStoryId = pending ? pending.id : state.selectedStoryId;
+  }
   if (needsStory && !state.selectedStoryId && v.stories.length) {
     state.selectedStoryId = v.stories[0].id;
   }
@@ -245,14 +258,43 @@ async function runStep(v, step) {
 // ja vestlus pakub järgmise sammu.
 function answerQuestion(v, p, d, idx, answer) {
   d.questions[idx].answer = answer;
-  if (d.questions.some((q) => !q.answer)) {
-    render();
-    return;
-  }
   run(async () => {
     setView(await api('POST', `/api/projects/${v.id}/apply`, { proposalId: p.id, edited: { questions: d.questions } }));
     delete state.drafts[p.id];
+    await interview();
   });
+}
+
+// Intervjuu: AI küsib järgmise küsimuse ise. Kui info on piisav, läheb vestlus rollide juurde.
+async function interview() {
+  const id = state.view.id;
+  const res = await api('POST', `/api/projects/${id}/ai`, { task: 'questions' });
+  setView(res.project);
+  if (res.proposal.payload.done) {
+    setView(await api('POST', `/api/projects/${id}/apply`, { proposalId: res.proposal.id, edited: {} }));
+    await autoAdvance();
+  }
+}
+
+// Pärast iga kinnitust pakub AI ise järgmise sammu: rollid, lood, prioriteet ja mockup lugu haaval.
+// Kasutaja otsustab ikka iga ettepaneku, aga ei pea ise teadma, mida küsida.
+async function autoAdvance() {
+  const v = state.view;
+  if (!v || !v.description || v.proposals.length > 0) return;
+  const ask = async (body) => setView((await api('POST', `/api/projects/${v.id}/ai`, body)).project);
+  if (v.stage === 'roles') return ask({ task: 'roles' });
+  if (v.stage === 'stories') return ask({ task: 'stories' });
+  if (v.stage === 'priorities') return ask({ task: 'priority' });
+  if (v.stage === 'criteria') {
+    const story = v.stories.find((s) => !s.hasMockup);
+    if (story) {
+      state.selectedStoryId = story.id;
+      return ask({ task: 'criteria', storyId: story.id });
+    }
+    // Kõigil lugudel on mockup: liigume täpsustuste juurde.
+    return setView(await api('PUT', `/api/projects/${v.id}/stage`, { stage: 'refinement' }));
+  }
+  return undefined;
 }
 
 // Leiab ootel küsimustiku, kus on vastamata küsimus. Vabatekst vestluskastist vastab sellele.
@@ -278,6 +320,7 @@ function proposalActions(v, p, edited) {
       onclick: () => run(async () => {
         setView(await api('POST', `/api/projects/${v.id}/apply`, { proposalId: p.id, edited }));
         delete state.drafts[p.id];
+        await autoAdvance();
       }),
     }, 'Kinnita'),
     el('button', {
@@ -350,10 +393,12 @@ function renderProposal(v, p) {
         const chosen = d.stories.filter((_, i) => !d.included || d.included[i] !== false);
         setView(await api('POST', `/api/projects/${v.id}/apply`, { proposalId: p.id, edited: { stories: chosen } }));
         delete state.drafts[p.id];
+        await autoAdvance();
       }) }, 'Lisa valitud backlog’i'),
       el('button', { disabled: state.busy, onclick: () => run(async () => {
         setView(await api('POST', `/api/projects/${v.id}/apply`, { proposalId: p.id, edited: {} }));
         delete state.drafts[p.id];
+        await autoAdvance();
       }) }, 'Lisa kõik'),
       el('button', { disabled: state.busy, onclick: () => run(async () => {
         await api('POST', `/api/projects/${v.id}/reject`, { proposalId: p.id });
@@ -424,6 +469,7 @@ function renderProposal(v, p) {
         setView(await api('POST', `/api/projects/${v.id}/apply`, { proposalId: p.id, edited }));
         delete state.drafts[p.id];
         state.editing = null;
+        await autoAdvance();
       }) }, 'Rakenda'),
     ]));
   }

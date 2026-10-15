@@ -31,6 +31,7 @@ const STAGE_TASK = {
 
 const STATUSES = ['Idee', 'Vajab täpsustamist', 'Läbivaadatud', 'Valmis arenduseks'];
 const HISTORY_LIMIT = 30;
+const MAX_QUESTIONS = 8;
 const PROPOSAL_LIMIT = 20;
 
 class ValidationError extends Error {}
@@ -93,6 +94,7 @@ function view(project) {
     name: project.name,
     description: project.description,
     stage: project.stage,
+    stageTask: STAGE_TASK[project.stage],
     stages: STAGES,
     answers: project.answers,
     roles: project.roles,
@@ -121,39 +123,21 @@ function contextFor(project, extra = {}) {
   };
 }
 
-// Järgmised sammud, 1–4 valikut. Kasutaja ei jää kunagi ilma järgmise sammuta.
+// Järgmised sammud. Vestlus viib protsessi ise edasi (AI küsib ja pakub), seega valikuid näidatakse
+// alles siis, kui kasutaja peab päriselt otsustama: millise loo juurde minna ja kas backlog üle vaadata.
 function nextSteps(project) {
   const steps = [];
-  const hasStories = project.stories.length > 0;
-  const hasRoles = project.roles.length > 0;
   const stage = project.stage;
-  if (stage === 'idea') {
-    steps.push({ label: 'Esita täpsustavad küsimused', action: { type: 'ai', task: 'questions' } });
-    steps.push({ label: 'Paku rollid', action: { type: 'ai', task: 'roles' } });
-  } else if (stage === 'roles') {
-    steps.push({ label: hasRoles ? 'Paku rollid uuesti' : 'Paku rollid', action: { type: 'ai', task: 'roles' } });
-    steps.push({ label: 'Liigu lugude juurde', action: { type: 'stage', stage: 'stories' } });
-  } else if (stage === 'stories') {
-    steps.push({ label: 'Paku kasutajalood happy path’i järjekorras', action: { type: 'ai', task: 'stories' } });
-    if (hasStories) {
-      steps.push({ label: 'Seab prioriteedid', action: { type: 'stage', stage: 'priorities' } });
+  const withoutMockup = project.stories.filter((s) => !s.mockupId).length;
+  if (stage === 'criteria' || stage === 'refinement') {
+    if (withoutMockup > 0) {
+      steps.push({ label: 'Järgmine lugu', action: { type: 'ai', task: 'criteria' } });
     }
-  } else if (stage === 'priorities') {
-    steps.push({ label: 'Küsi, millisest loost alustada', action: { type: 'ai', task: 'priority' } });
-    steps.push({ label: 'Liigu kriteeriumide juurde', action: { type: 'stage', stage: 'criteria' } });
-  } else if (stage === 'criteria') {
-    steps.push({ label: 'Paku kriteeriumid ja mockup valitud loole', action: { type: 'ai', task: 'criteria' } });
-    steps.push({ label: 'Liigu täpsustuste juurde', action: { type: 'stage', stage: 'refinement' } });
-  } else if (stage === 'refinement') {
-    steps.push({ label: 'Rakenda kliendi täpsustus', action: { type: 'ai', task: 'refine' } });
-    steps.push({ label: 'Liigu groomimise juurde', action: { type: 'stage', stage: 'grooming' } });
+    steps.push({ label: 'Vaata backlog üle', action: { type: 'ai', task: 'groom' } });
   } else if (stage === 'grooming') {
     steps.push({ label: 'Vaata backlog üle', action: { type: 'ai', task: 'groom' } });
   }
-  if (steps.length < 4 && hasStories && stage !== 'grooming') {
-    steps.push({ label: 'Vaata backlog üle', action: { type: 'ai', task: 'groom' } });
-  }
-  return steps.slice(0, 4);
+  return steps;
 }
 
 // Salvestab hetkeseisu, et viimane muudatus saaks tagasi võtta.
@@ -207,6 +191,11 @@ async function propose(project, task, input = {}) {
   }
   const raw = await askAI(task, contextFor(project, extra));
   const payload = validatePayload(task, raw, project);
+  if (task === 'chat') {
+    // Vaba vestlus ei loo ettepanekut ega muuda andmeid, AI vastus läheb ainult vestlusse.
+    project.messages.push({ role: 'ai', text: payload.message, ts: now() });
+    return { id: null, task, storyId: null, payload, status: 'done', createdAt: now() };
+  }
   const proposal = {
     id: id('x'), task, storyId: storyId || null, payload, status: 'pending', createdAt: now(),
   };
@@ -227,15 +216,22 @@ function validatePayload(task, raw, project) {
   const fail = (r) => { throw new ValidationError(r.error); };
   switch (task) {
     case 'questions': {
-      if (!Array.isArray(raw.questions) || raw.questions.length < 1 || raw.questions.length > 3) {
-        throw new ValidationError('Küsimusi peab olema 1–3.');
+      // Intervjuu: AI esitab ühe küsimuse korraga, kuni info on piisav (done) või piir on täis.
+      const asked = project.answers.length;
+      if (raw.done === true || asked >= MAX_QUESTIONS) {
+        return { message, done: true, questions: [] };
       }
-      return { message, questions: raw.questions.map((q) => ({
+      if (!Array.isArray(raw.questions) || raw.questions.length < 1) {
+        throw new ValidationError('AI ei esitanud küsimust.');
+      }
+      return { message, done: false, questions: raw.questions.slice(0, 1).map((q) => ({
         text: String(q.text || '').slice(0, 300),
         options: (q.options || []).slice(0, 4).map((o) => String(o).slice(0, 100)),
         answer: q.answer ? String(q.answer).slice(0, 300) : null,
       })) };
     }
+    case 'chat':
+      return { message: message || 'Sain aru.' };
     case 'roles': {
       const r = v.validateRoles(raw.roles);
       if (!r.ok) fail(r);
@@ -337,7 +333,11 @@ function apply(project, proposalId, edited = {}) {
 
   switch (proposal.task) {
     case 'questions':
-      project.answers.push(...payload.questions.map((q) => ({ question: q.text, answer: q.answer || null })));
+      if (payload.done) {
+        project.stage = 'roles';
+      } else {
+        project.answers.push(...payload.questions.map((q) => ({ question: q.text, answer: q.answer || null })));
+      }
       break;
     case 'roles':
       project.roles = payload.roles;
@@ -372,7 +372,8 @@ function apply(project, proposalId, edited = {}) {
       throw new ValidationError('Seda ettepanekut ei saa rakendada.');
   }
   // Kinnitatud samm viib projekti loomulikult järgmisse etappi (undo taastab etapi).
-  const NEXT_STAGE = { questions: 'roles', roles: 'stories', stories: 'priorities', priority: 'criteria', criteria: 'refinement' };
+  // Kriteeriumide etapp jätkub, kuni kõigil lugudel on mockup (liikumise otsustab liides).
+  const NEXT_STAGE = { roles: 'stories', stories: 'priorities', priority: 'criteria' };
   if (NEXT_STAGE[proposal.task]) {
     project.stage = NEXT_STAGE[proposal.task];
   }

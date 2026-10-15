@@ -151,3 +151,30 @@ test('groomimine: ühendamine ja ignoreerimine rakenduvad eraldi, tagasivõtmine
   service.undo(project);
   assert.equal(project.stories.length, before, 'tagasivõtmine taastab loendi');
 });
+
+test('intervjuu: AI küsib ühe küsimuse korraga ja ütleb lõpuks, et info on piisav', async () => {
+  const project = service.createProject({ name: 'Klubi', description: 'x' });
+  let rounds = 0;
+  for (; rounds < 10; rounds += 1) {
+    const proposal = await service.propose(project, 'questions', {});
+    if (proposal.payload.done) {
+      service.apply(project, proposal.id, {});
+      break;
+    }
+    assert.equal(proposal.payload.questions.length, 1, 'üks küsimus korraga');
+    service.apply(project, proposal.id, { questions: [{ ...proposal.payload.questions[0], answer: 'vastus' }] });
+  }
+  assert.equal(project.answers.length, 3);
+  assert.equal(project.stage, 'roles', 'valmis intervjuu viib rollide etappi');
+});
+
+test('vaba vestlus ei muuda backlog’i ega loo ettepanekut', async () => {
+  const project = service.createProject({ name: 'Klubi', description: 'x' });
+  service.addStoryManually(project, { role: 'külastajana', action: 'a', benefit: 'b', criteria: ['c on nähtav.'] });
+  const before = JSON.stringify(project.stories);
+  const reply = await service.propose(project, 'chat', { text: 'Mida teha?' });
+  assert.equal(reply.status, 'done');
+  assert.equal(project.proposals.length, 0);
+  assert.equal(JSON.stringify(project.stories), before);
+  assert.ok(project.messages.length >= 1);
+});

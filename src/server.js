@@ -135,7 +135,7 @@ function createApp({ dataFile }) {
       const project = store.get(pid);
       if (!project) return send(res, 404, { error: 'Projekti ei leitud.' });
       const task = body.task || service.STAGE_TASK[project.stage];
-      if (!Object.values(service.STAGE_TASK).includes(task)) {
+      if (task !== 'chat' && !Object.values(service.STAGE_TASK).includes(task)) {
         throw new service.ValidationError('Tundmatu AI ülesanne.');
       }
       // AI päring on aeglane, seega muudame koopiat ja salvestame alles pärast vastust.
