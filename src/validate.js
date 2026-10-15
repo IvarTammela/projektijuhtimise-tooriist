@@ -33,6 +33,15 @@ function validateCriteria(list) {
   return { ok: true, value: list.map((c) => (typeof c === 'string' ? c.trim() : c.text.trim())) };
 }
 
+// AI lisab vahel tegevuse ette "soovin"/"tahan" ja kasu ette "et", aga pealkiri lisab need ise.
+function cleanAction(text) {
+  return text.trim().replace(/^(soovin|tahan)\s+/i, '');
+}
+
+function cleanBenefit(text) {
+  return text.trim().replace(/^et\s+/i, '');
+}
+
 function validateStory(s) {
   if (!s || typeof s !== 'object') {
     return fail('Lugu peab olema objekt.');
@@ -48,8 +57,8 @@ function validateStory(s) {
     ok: true,
     value: {
       role: s.role.trim(),
-      action: s.action.trim(),
-      benefit: s.benefit.trim(),
+      action: cleanAction(s.action),
+      benefit: cleanBenefit(s.benefit),
       criteria: criteria.value,
       viewStory: Boolean(s.viewStory),
       size: ['S', 'M', 'L'].includes(s.size) ? s.size : 'M',

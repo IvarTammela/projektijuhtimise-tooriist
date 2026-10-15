@@ -165,6 +165,20 @@ function createApp({ dataFile }) {
       }));
     }
 
+    // Backlog’i eksport Markdowni või CSV-sse (lisavõimalus).
+    if (sub === 'export' && method === 'GET') {
+      const project = store.get(pid);
+      if (!project) return send(res, 404, { error: 'Projekti ei leitud.' });
+      const v = service.view(project);
+      const format = url.searchParams.get('format') === 'csv' ? 'csv' : 'md';
+      const text = format === 'csv' ? exportCsv(v) : exportMarkdown(v);
+      res.writeHead(200, {
+        'content-type': format === 'csv' ? 'text/csv; charset=utf-8' : 'text/markdown; charset=utf-8',
+        'content-disposition': `attachment; filename="backlog.${format}"`,
+      });
+      return res.end(`﻿${text}`);
+    }
+
     if (sub === 'idea' && method === 'PUT') {
       return send(res, 200, withProject(pid, (p) => {
         const text = String(body.text || '').trim();
@@ -232,6 +246,26 @@ function createApp({ dataFile }) {
 
 function clone(x) {
   return JSON.parse(JSON.stringify(x));
+}
+
+function exportMarkdown(v) {
+  const lines = [`# ${v.name}`, '', v.description, '', '## Backlog', ''];
+  v.stories.forEach((s) => {
+    lines.push(`### ${s.code}${s.mvp ? ' (MVP)' : ''}: ${s.title}`, `Staatus: ${s.status} · Suurus: ${s.size} · Päritolu: ${s.origin}`, '');
+    s.criteria.forEach((c) => lines.push(`- ${c.text}`));
+    lines.push('');
+  });
+  return lines.join('\n');
+}
+
+function csvCell(value) {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+function exportCsv(v) {
+  const rows = [['Kood', 'MVP', 'Pealkiri', 'Staatus', 'Suurus', 'Päritolu', 'Kriteeriumid']];
+  v.stories.forEach((s) => rows.push([s.code, s.mvp ? 'jah' : '', s.title, s.status, s.size, s.origin, s.criteria.map((c) => c.text).join(' | ')]));
+  return rows.map((r) => r.map(csvCell).join(',')).join('\n');
 }
 
 if (require.main === module) {

@@ -104,3 +104,24 @@ td, th { border-bottom: 1px solid var(--border); padding: 6px 4px; text-align: l
 .diff { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .diff > div { border: 1px solid var(--border); border-radius: 6px; padding: 6px; }
 .error { color: var(--warn); margin: 6px 0; }
+
+/* Lugude kaardid backlog’is */
+.story-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.story-card { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--panel); cursor: pointer; }
+.story-card.selected { border-color: var(--accent); }
+.story-head { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
+.story-actions { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.drag { color: var(--muted); cursor: grab; }
+.chip { font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); }
+.mvp-chip { color: var(--accent); border-color: var(--accent); }
+
+/* Ettepanekute sisu vestluses */
+.label { font-size: 11px; letter-spacing: .05em; font-weight: 700; margin: 10px 0 4px; }
+.crit-list { list-style: none; padding: 0; margin: 0; }
+.crit-list li { color: var(--ok); padding: 2px 0; }
+.crit-list li::before { content: '+ '; font-weight: 700; }
+.crit-list input[type="text"] { width: calc(100% - 40px); }
+.row.actions { justify-content: flex-end; margin-top: 10px; }
+
+/* Järgmise sammu nupud on ümarad */
+.next button { border-radius: 18px; padding: 6px 14px; }

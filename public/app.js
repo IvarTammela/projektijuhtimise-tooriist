@@ -355,29 +355,52 @@ function renderProposal(v, p) {
 
   if (p.task === 'criteria' || p.task === 'refine') {
     const story = v.stories.find((s) => s.id === d.storyId);
-    if (story) body.push(el('p', {}, `Lugu: ${story.title}`));
     const crit = d.criteria || (d.changes && d.changes.criteria) || [];
     const list = d.criteria ? d : d.changes;
-    // Kriteeriume saab muuta, eemaldada ja lisada enne kinnitamist.
-    body.push(el('div', { class: 'card-item' }, [
-      el('strong', {}, 'Kriteeriumid (muuda vajadusel)'),
-      ...crit.map((c, i) => el('div', { class: 'row' }, [
-        el('input', { type: 'text', value: c, oninput: (e) => { list.criteria ? list.criteria[i] = e.target.value : null; } }),
-        el('button', { onclick: () => { list.criteria.splice(i, 1); render(); } }, '✗'),
-      ])),
-      el('button', { onclick: () => {
+    const editing = state.editing === p.id;
+    const mock = v.mockups.find((m) => m.storyId === d.storyId);
+    const before = mock ? mock.versions[mock.versions.length - 1].root : null;
+    if (story) body.push(el('p', { class: 'muted' }, `${story.code}: ${story.title}`));
+
+    // Kriteeriumid on vaikimisi lugemisvaates, nupp Muuda teeb need muudetavaks.
+    body.push(el('div', { class: 'label' }, 'VASTUVÕTUKRITEERIUMID'));
+    body.push(el('ul', { class: 'crit-list' }, crit.map((c, i) => el('li', {}, editing ? [
+      el('input', { type: 'text', value: c, oninput: (e) => { list.criteria[i] = e.target.value; } }),
+      el('button', { onclick: () => { list.criteria.splice(i, 1); render(); } }, '✗'),
+    ] : c))));
+    if (editing) {
+      body.push(el('button', { onclick: () => {
         if (!list.criteria) list.criteria = [];
         list.criteria.push('Uus kriteerium');
         render();
-      } }, 'Lisa kriteerium'),
-    ]));
+      } }, '+ Lisa kriteerium'));
+    }
+
+    // Enne ja pärast kõrvuti, et muudatus oleks kohe näha.
     if (d.mockup) {
-      body.push(el('div', { class: 'mock' }, [el('strong', {}, 'Mockup (eelvaade)'), renderMockupTree(d.mockup)]));
+      body.push(el('div', { class: 'label' }, 'MOCKUP’ID'));
+      body.push(el('div', { class: 'diff' }, [
+        el('div', {}, [el('div', { class: 'muted' }, 'Enne'), before ? renderMockupTree(before) : el('p', { class: 'muted' }, 'Mockup puudub')]),
+        el('div', {}, [el('div', { class: 'muted' }, 'Pärast'), el('div', { class: 'mock' }, renderMockupTree(d.mockup))]),
+      ]));
     }
     if (d.otherStoryChanges && d.otherStoryChanges.length) {
       body.push(el('p', { class: 'muted' }, 'Teisi lugusid mõjutavad muudatused on eraldi ettepanekutena: ' + d.otherStoryChanges.map((o) => o.description).join('; ')));
     }
-    body.push(proposalActions(v, p, p.task === 'criteria' ? { criteria: d.criteria, mockup: d.mockup } : { changes: d.changes, mockup: d.mockup }));
+    const edited = p.task === 'criteria' ? { criteria: d.criteria, mockup: d.mockup } : { changes: d.changes, mockup: d.mockup };
+    body.push(el('div', { class: 'row actions' }, [
+      el('button', { disabled: state.busy, onclick: () => run(async () => {
+        setView(await api('POST', `/api/projects/${v.id}/reject`, { proposalId: p.id }));
+        delete state.drafts[p.id];
+        state.editing = null;
+      }) }, 'Loobu'),
+      el('button', { disabled: state.busy, onclick: () => { state.editing = editing ? null : p.id; render(); } }, editing ? 'Valmis muutma' : '✎ Muuda'),
+      el('button', { class: 'primary', disabled: state.busy, onclick: () => run(async () => {
+        setView(await api('POST', `/api/projects/${v.id}/apply`, { proposalId: p.id, edited }));
+        delete state.drafts[p.id];
+        state.editing = null;
+      }) }, 'Rakenda'),
+    ]));
   }
 
   if (p.task === 'groom') {
@@ -414,55 +437,55 @@ function renderProposal(v, p) {
 // ---- Backlog ----
 
 function renderBacklog(v) {
-  const rows = v.stories.map((s, i) => el('tr', {
-    class: s.id === state.selectedStoryId ? 'selected' : '',
-  }, [
-    el('td', {}, [
-      el('button', { onclick: () => run(async () => setView(await api('PUT', `/api/projects/${v.id}/order`, {
-        order: moved(v.stories, i, -1).map((x) => x.id),
-      }))), disabled: i === 0 || state.busy }, '▲'),
-      el('button', { onclick: () => run(async () => setView(await api('PUT', `/api/projects/${v.id}/order`, {
-        order: moved(v.stories, i, 1).map((x) => x.id),
-      }))), disabled: i === v.stories.length - 1 || state.busy }, '▼'),
-    ]),
-    el('td', {}, [
-      el('a', { href: '#', onclick: (e) => { e.preventDefault(); state.selectedStoryId = s.id; render(); } }, s.title),
-      s.mvp ? el('span', { class: 'mvp' }, ' · MVP') : null,
+  const api2 = (method, url, body) => run(async () => setView(await api(method, `/api/projects/${v.id}${url}`, body)));
+
+  // Iga lugu on kaart. Valitud loo all on tegevused (järjekord, staatus, MVP, täpsustus, kustutus).
+  const cards = v.stories.map((s, i) => {
+    const selected = s.id === state.selectedStoryId;
+    const head = el('div', { class: 'story-head' }, [
+      el('span', { class: 'drag' }, '⋮⋮'),
+      el('strong', {}, s.code),
+      el('span', { class: 'chip' }, s.status),
+      s.mvp ? el('span', { class: 'chip mvp-chip' }, 'MVP') : null,
+      el('span', { class: 'chip' }, s.origin === 'Käsitsi' ? 'Käsitsi' : 'AI'),
+    ]);
+    const actions = selected ? el('div', { class: 'story-actions' }, [
+      el('div', { class: 'row' }, [
+        el('button', { disabled: i === 0 || state.busy, onclick: (e) => { e.stopPropagation(); api2('PUT', '/order', { order: moved(v.stories, i, -1).map((x) => x.id) }); } }, '▲'),
+        el('button', { disabled: i === v.stories.length - 1 || state.busy, onclick: (e) => { e.stopPropagation(); api2('PUT', '/order', { order: moved(v.stories, i, 1).map((x) => x.id) }); } }, '▼'),
+        el('select', { onclick: (e) => e.stopPropagation(), onchange: (e) => api2('PATCH', `/stories/${s.id}`, { status: e.target.value }) },
+          ['Idee', 'Vajab täpsustamist', 'Läbivaadatud', 'Valmis arenduseks'].map((st) => el('option', { value: st, selected: st === s.status }, st))),
+      ]),
+      el('div', { class: 'row' }, [
+        el('button', { onclick: (e) => { e.stopPropagation(); api2('PUT', '/mvp', { storyId: v.mvpStoryId === s.id ? null : s.id }); } }, v.mvpStoryId === s.id ? 'Eemalda MVP joon' : 'Lisa MVP joon siia'),
+        el('button', { onclick: (e) => {
+          e.stopPropagation();
+          const q = prompt('Avatud küsimus (tühi = tühista):');
+          if (q === null || !q.trim()) return;
+          api2('PATCH', `/stories/${s.id}`, { openQuestions: [...s.openQuestions, q.trim()], status: 'Vajab täpsustamist' });
+        } }, 'Täpsusta'),
+        el('button', { onclick: (e) => {
+          e.stopPropagation();
+          if (confirm('Kustutada lugu?')) api2('DELETE', `/stories/${s.id}`);
+        } }, 'Kustuta'),
+      ]),
       s.openQuestions.length ? el('p', { class: 'missing' }, 'Avatud: ' + s.openQuestions.join('; ')) : null,
-      el('div', { class: 'muted' }, `${s.criteria.length} kriteeriumi · ${s.origin}`),
-    ]),
-    el('td', {}, [
-      el('select', { onchange: (e) => run(async () => setView(await api('PATCH', `/api/projects/${v.id}/stories/${s.id}`, { status: e.target.value }))) },
-        ['Idee', 'Vajab täpsustamist', 'Läbivaadatud', 'Valmis arenduseks'].map((st) => el('option', { value: st, selected: st === s.status }, st))),
-      s.ready.ok ? el('span', { class: 'badge ok' }, 'Valmis') : el('span', { class: 'badge warn' }, 'Puudu'),
-      s.ready.ok ? null : el('ul', { class: 'missing' }, s.ready.missing.map((m) => el('li', {}, m))),
-    ]),
-    el('td', {}, [
-      el('button', { onclick: () => run(async () => setView(await api('PUT', `/api/projects/${v.id}/mvp`, { storyId: s.mvp && v.mvpStoryId === s.id ? null : s.id }))), disabled: state.busy }, v.mvpStoryId === s.id ? 'Eemalda MVP' : 'MVP joon siia'),
-      el('button', { onclick: () => {
-        const q = prompt('Avatud küsimus (tühi = tühista):');
-        if (q === null) return;
-        run(async () => setView(await api('PATCH', `/api/projects/${v.id}/stories/${s.id}`, { openQuestions: q.trim() ? [...s.openQuestions, q.trim()] : s.openQuestions, status: q.trim() ? 'Vajab täpsustamist' : undefined })));
-      } }, 'Täpsusta'),
-      el('button', { onclick: () => {
-        if (!confirm('Kustutada lugu?')) return;
-        run(async () => setView(await api('DELETE', `/api/projects/${v.id}/stories/${s.id}`)));
-      } }, 'Kustuta'),
-    ]),
-  ]));
+      s.ready.ok ? el('span', { class: 'badge ok' }, 'Valmis arenduseks') : el('ul', { class: 'missing' }, s.ready.missing.map((m) => el('li', {}, m))),
+    ]) : null;
+    return el('div', { class: `story-card${selected ? ' selected' : ''}`, onclick: () => { state.selectedStoryId = s.id; render(); } }, [head, el('div', {}, s.title), actions]);
+  });
 
   return el('div', { class: 'panel' }, [
-    el('h3', {}, 'Rollid'),
-    el('p', { class: 'muted' }, v.roles.length ? v.roles.join(', ') : 'Rolle pole veel määratud.'),
     el('h3', {}, 'Backlog'),
-    v.stories.length ? el('table', {}, [
-      el('thead', {}, el('tr', {}, [el('th', {}, 'Järjekord'), el('th', {}, 'Lugu'), el('th', {}, 'Staatus'), el('th', {}, 'Tegevused')])),
-      el('tbody', {}, rows),
-    ]) : el('p', { class: 'muted' }, 'Backlog on tühi.'),
-    renderManualStory(v),
+    v.roles.length ? el('div', { class: 'chips' }, v.roles.map((r) => el('span', { class: 'chip' }, r))) : null,
+    v.stories.length ? el('div', { class: 'story-list' }, cards) : el('p', { class: 'muted' }, 'Backlog on tühi.'),
     el('div', { class: 'row' }, [
-      el('button', { disabled: !v.canUndo || state.busy, onclick: () => run(async () => setView(await api('POST', `/api/projects/${v.id}/undo`))) }, 'Võta viimane muudatus tagasi'),
+      el('button', { disabled: state.busy || !v.stories.length, onclick: () => run(async () => setView((await api('POST', `/api/projects/${v.id}/ai`, { task: 'groom' })).project)) }, '+ Vaata backlog üle'),
+      el('button', { onclick: () => window.open(`/api/projects/${v.id}/export?format=md`) }, 'Markdown'),
+      el('button', { onclick: () => window.open(`/api/projects/${v.id}/export?format=csv`) }, 'CSV'),
+      el('button', { disabled: !v.canUndo || state.busy, onclick: () => api2('POST', '/undo') }, 'Võta tagasi'),
     ]),
+    renderManualStory(v),
   ]);
 }
 

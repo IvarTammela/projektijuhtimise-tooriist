@@ -62,6 +62,7 @@ function createProject({ name, description }) {
     stories: [],
     mockups: [],
     mvpStoryId: null,
+    nextSeq: 0,
     proposals: [],
     history: [],
     messages: [],
@@ -79,6 +80,7 @@ function storyView(project, s) {
   return {
     ...s,
     title: storyTitle(s),
+    code: `US-${s.seq || index + 1}`,
     hasMockup,
     mvp: mvpIndex !== -1 && index <= mvpIndex,
     ready: rules.checkReady(s, { hasMockup }),
@@ -341,7 +343,7 @@ function apply(project, proposalId, edited = {}) {
       project.roles = payload.roles;
       break;
     case 'stories':
-      payload.stories.forEach((s) => project.stories.push(newStory(s, 'AI ettepanek')));
+      payload.stories.forEach((s) => project.stories.push(newStory(s, 'AI ettepanek', project)));
       break;
     case 'priority': {
       const map = new Map(project.stories.map((s) => [s.id, s]));
@@ -393,9 +395,11 @@ function reject(project, proposalId) {
   proposal.status = 'rejected';
 }
 
-function newStory(s, origin) {
+function newStory(s, origin, project) {
+  project.nextSeq = (project.nextSeq || 0) + 1;
   return {
     id: id('s'),
+    seq: project.nextSeq,
     role: s.role,
     action: s.action,
     benefit: s.benefit,
@@ -448,7 +452,7 @@ function applyGroomFinding(project, payload, index, ignore) {
     s.openQuestions.push(finding.explanation);
   } else if (finding.kind === 'split' || finding.kind === 'merge') {
     const removeIds = new Set(finding.storyIds);
-    const created = finding.stories.map((s) => newStory(s, 'Groomimine'));
+    const created = finding.stories.map((s) => newStory(s, 'Groomimine', project));
     const insertAt = pos === -1 ? project.stories.length : pos;
     project.stories = project.stories.filter((s) => !removeIds.has(s.id));
     project.stories.splice(insertAt, 0, ...created);
@@ -461,7 +465,7 @@ function addStoryManually(project, body) {
   const r = v.validateStory(body);
   if (!r.ok) throw new ValidationError(r.error);
   snapshot(project);
-  const s = newStory(r.value, 'Käsitsi');
+  const s = newStory(r.value, 'Käsitsi', project);
   project.stories.push(s);
   return s;
 }
