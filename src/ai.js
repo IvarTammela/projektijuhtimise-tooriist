@@ -24,14 +24,43 @@ class AiUnavailableError extends Error {
   }
 }
 
+// AI vastus ei olnud kasutatav JSON. Server näitab selle kohta arusaadavat teadet, mitte tehnilist viga.
+class AiInvalidResponseError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'AiInvalidResponseError';
+  }
+}
+
+const JSON_RULES = ' Vasta ainult ühe kehtiva JSON-objektiga, ilma selgituste ja koodiplokita. Ära kasuta tekstides tavalisi jutumärke ("), kasuta vajadusel ’ või „ ”.';
+
 // Võtab mudeli vastusest esimese JSON-objekti. Ei usalda, et vastus on puhas JSON.
 function extractJson(text) {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start === -1 || end <= start) {
-    throw new Error('Vastuses ei ole JSON-objekti.');
+    throw new AiInvalidResponseError('Vastuses ei ole JSON-objekti.');
   }
-  return JSON.parse(text.slice(start, end + 1));
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch (err) {
+    throw new AiInvalidResponseError(`Vastus ei ole korrektne JSON: ${err.message}`);
+  }
+}
+
+// Päris teenuse kutse: kui vastus pole korrektne JSON, proovime ühe korra uuesti vea teatega.
+async function callWithRetry(call, system, userText) {
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const hint = attempt === 0 ? '' : `\n\nEelmine vastus ei kõlvanud (${lastError.message}). Vasta uuesti ainult kehtiva JSON-iga.`;
+    try {
+      return extractJson(await call(system + JSON_RULES, userText + hint));
+    } catch (err) {
+      if (!(err instanceof AiInvalidResponseError)) throw err;
+      lastError = err;
+    }
+  }
+  throw new AiInvalidResponseError('AI vastus ei olnud korrektse kujuga. Proovi uuesti.');
 }
 
 async function callAnthropic(system, userText) {
@@ -160,16 +189,14 @@ async function askAI(task, context) {
   if (provider === 'mock') {
     return MOCK[task](context);
   }
-  if (provider === "claude-cli") {
-    const text = await callClaudeCli(system, `Kontekst (JSON):\n${JSON.stringify(context, null, 2)}`);
-    return extractJson(text);
+  const userText = `Kontekst (JSON):\n${JSON.stringify(context, null, 2)}`;
+  if (provider === 'claude-cli') {
+    return callWithRetry(callClaudeCli, system, userText);
   }
   if (provider === 'anthropic') {
-    const userText = JSON.stringify(context, null, 2);
-    const text = await callAnthropic(system, `Kontekst (JSON):\n${userText}`);
-    return extractJson(text);
+    return callWithRetry(callAnthropic, system, userText);
   }
   throw new Error(`Tundmatu AI_PROVIDER: ${provider}`);
 }
 
-module.exports = { askAI, extractJson, AiUnavailableError, PROMPTS };
+module.exports = { askAI, extractJson, AiUnavailableError, AiInvalidResponseError, PROMPTS };

@@ -70,6 +70,9 @@ function handleError(res, err) {
   if (err instanceof service.ValidationError) {
     return send(res, 400, { error: err.message, missing: err.missing });
   }
+  if (err instanceof service.AiInvalidResponseError) {
+    return send(res, 502, { error: err.message });
+  }
   if (err instanceof service.AiUnavailableError) {
     return send(res, 503, { error: err.message, aiUnavailable: true });
   }

@@ -4,7 +4,7 @@
 // AI ei muuda kunagi andmeid ise. Ta pakub ettepaneku, mille kasutaja peab kinnitama (apply).
 
 const crypto = require('crypto');
-const { askAI, AiUnavailableError } = require('./ai');
+const { askAI, AiUnavailableError, AiInvalidResponseError } = require('./ai');
 const rules = require('./rules');
 const v = require('./validate');
 
@@ -528,6 +528,7 @@ module.exports = {
   STAGE_TASK,
   ValidationError,
   AiUnavailableError,
+  AiInvalidResponseError,
   createProject,
   view,
   propose,
