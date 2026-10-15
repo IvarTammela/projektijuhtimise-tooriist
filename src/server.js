@@ -165,6 +165,14 @@ function createApp({ dataFile }) {
       }));
     }
 
+    if (sub === 'idea' && method === 'PUT') {
+      return send(res, 200, withProject(pid, (p) => {
+        const text = String(body.text || '').trim();
+        if (!text) throw new service.ValidationError('Idee kirjeldus ei tohi olla tühi.');
+        p.description = text.slice(0, 2000);
+      }));
+    }
+
     if (sub === 'messages' && method === 'POST') {
       return send(res, 200, withProject(pid, (p) => {
         const text = String(body.text || '').trim();

@@ -99,15 +99,12 @@ function renderSidebar() {
 $('#new-project').addEventListener('submit', (e) => {
   e.preventDefault();
   const form = e.target;
-  const body = { name: form.name.value, description: form.description.value };
+  const body = { name: form.name.value };
   run(async () => {
     const view = await api('POST', '/api/projects', body);
     form.reset();
     await loadProjects();
     setView(view);
-    // Vestlus algab ise: AI esitab kohe täpsustavad küsimused.
-    const res = await api('POST', `/api/projects/${view.id}/ai`, { task: 'questions' });
-    setView(res.project);
   });
 });
 
@@ -123,7 +120,6 @@ function render() {
   // replaceChildren kirjutaks null-i tekstina "null", seega filtreerime tühjad lapsed välja.
   main.replaceChildren(...[
     el('h2', {}, v.name),
-    v.description ? el('p', { class: 'muted' }, v.description) : null,
     renderStageBar(v),
     state.error ? el('p', { class: 'error' }, state.error) : null,
     el('div', { class: 'layout' }, [
@@ -151,23 +147,38 @@ function renderChat(v) {
     el('div', { class: 'msg ai' }, a.question),
     el('div', { class: 'msg user' }, a.answer),
   ]);
+  // Vestlus algab tervitusega. Kliendi idee, mille kasutaja kirjutab, on vestluse esimene sõnum.
+  const intro = v.description
+    ? [el('div', { class: 'msg ai' }, 'Tere! Mis on teie mõtted?'), el('div', { class: 'msg user' }, v.description)]
+    : [el('div', { class: 'msg ai' }, 'Tere! Mis on teie mõtted? Kirjelda vabas vormis, mida klient soovib. Pärast seda esitan sulle ühe kaupa täpsustavaid küsimusi.')];
   const messages = [
+    ...intro,
     ...v.messages.map((m) => el('div', { class: `msg ${m.role}` }, m.text || '(tühi)')),
     ...answered,
   ];
   const proposals = v.proposals.map((p) => renderProposal(v, p));
-  const next = el('div', { class: 'next' }, v.nextSteps.map((step) => el('button', {
+  // Enne kliendi ideed ei paku vestlus samme: kasutaja kirjutab esmalt oma mõtted.
+  const next = el('div', { class: 'next' }, (v.description ? v.nextSteps : []).map((step) => el('button', {
     disabled: state.busy,
     onclick: () => run(async () => runStep(v, step)),
   }, step.label)));
 
-  const textarea = el('textarea', { id: 'chat-input', rows: 2, placeholder: 'Kirjuta vabalt (kliendi vastus, täpsustus, küsimus)' });
+  const textarea = el('textarea', { id: 'chat-input', rows: 2, placeholder: v.description ? 'Kirjuta vabalt (kliendi vastus, täpsustus, küsimus)' : 'Kirjelda oma idee…' });
   const sendBtn = el('button', {
     class: 'primary',
     disabled: state.busy,
     onclick: () => {
       const text = textarea.value.trim();
       if (!text) return;
+      // Esimene sõnum on kliendi idee. See salvestatakse ja AI hakkab ühe kaupa küsima.
+      if (!v.description) {
+        run(async () => {
+          setView(await api('PUT', `/api/projects/${v.id}/idea`, { text }));
+          const res = await api('POST', `/api/projects/${v.id}/ai`, { task: 'questions' });
+          setView(res.project);
+        });
+        return;
+      }
       // Kui küsimustik on pooleli, on vabatekst vastus jooksvale küsimusele.
       const open = pendingQuestionnaire(v);
       if (open) {
@@ -185,7 +196,7 @@ function renderChat(v) {
     el('h3', {}, 'Juhitud vestlus'),
     el('div', {}, messages.length ? messages : [el('p', { class: 'muted' }, 'Alusta järgmise sammuga.')]),
     ...proposals,
-    el('h3', {}, 'Järgmine samm'),
+    v.description ? el('h3', {}, 'Järgmine samm') : null,
     next,
     el('div', { class: 'row' }, [textarea, sendBtn]),
   ]);
