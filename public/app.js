@@ -36,12 +36,24 @@ function el(tag, attrs = {}, children = []) {
 }
 
 async function api(method, url, body) {
-  const res = await fetch(url, {
-    method,
-    headers: { 'content-type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const data = await res.json().catch(() => ({}));
+  // AI päring on aeglane: näitame vestluses, et AI mõtleb.
+  const isAi = url.endsWith('/ai');
+  if (isAi) {
+    state.thinking = true;
+    render();
+  }
+  let res;
+  let data;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    data = await res.json().catch(() => ({}));
+  } finally {
+    if (isAi) state.thinking = false;
+  }
   if (!res.ok) {
     const err = new Error(data.error || `Viga (${res.status})`);
     err.missing = data.missing;
@@ -117,6 +129,11 @@ function render() {
     return;
   }
   const v = state.view;
+  // Uuesti joonistamine asendab kogu DOM-i, seega jätame vestluse ja lehe kerimisasukoha meelde.
+  const oldChat = document.querySelector('.layout > .panel:first-child');
+  const wasAtBottom = !oldChat || oldChat.scrollTop + oldChat.clientHeight >= oldChat.scrollHeight - 80;
+  const oldChatTop = oldChat ? oldChat.scrollTop : 0;
+  const oldPageTop = window.scrollY;
   // replaceChildren kirjutaks null-i tekstina "null", seega filtreerime tühjad lapsed välja.
   main.replaceChildren(...[
     el('h2', {}, v.name),
@@ -128,6 +145,13 @@ function render() {
     ]),
     renderMockupPanel(v),
   ].filter(Boolean));
+
+  // Kui kasutaja oli vestluse lõpus, järgime uut sisu. Kui ta kerib ülal, jääb asukoht samaks.
+  const chat = document.querySelector('.layout > .panel:first-child');
+  if (chat) {
+    chat.scrollTop = wasAtBottom ? chat.scrollHeight : oldChatTop;
+  }
+  window.scrollTo(0, oldPageTop);
 }
 
 function renderStageBar(v) {
@@ -196,6 +220,7 @@ function renderChat(v) {
     el('h3', {}, 'Juhitud vestlus'),
     el('div', {}, messages.length ? messages : [el('p', { class: 'muted' }, 'Alusta järgmise sammuga.')]),
     ...proposals,
+    state.thinking ? el('div', { class: 'msg ai thinking' }, 'AI mõtleb…') : null,
     v.description ? el('h3', {}, 'Järgmine samm') : null,
     next,
     el('div', { class: 'row' }, [textarea, sendBtn]),

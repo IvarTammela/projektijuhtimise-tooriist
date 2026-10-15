@@ -125,3 +125,7 @@ td, th { border-bottom: 1px solid var(--border); padding: 6px 4px; text-align: l
 
 /* Järgmise sammu nupud on ümarad */
 .next button { border-radius: 18px; padding: 6px 14px; }
+
+/* "AI mõtleb" märge vestluses */
+.thinking { color: var(--muted); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
