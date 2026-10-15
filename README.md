@@ -45,7 +45,7 @@ npm test
 
 | Muutuja | Kirjeldus | Vaikimisi |
 |---|---|---|
-| `AI_PROVIDER` | `anthropic`, `mock` või `none` | `anthropic`, kui võti on olemas, muidu `none` |
+| `AI_PROVIDER` | `anthropic`, `claude-cli` (kasutab sisselogitud Claude Code’i, võtit pole vaja), `mock` või `none` | `anthropic`, kui võti on olemas, muidu `none` |
 | `ANTHROPIC_API_KEY` | AI teenuse võti (ainult serveris) | tühi |
 | `AI_MODEL` | Mudeli nimi | `claude-sonnet-5-5` |
 | `PORT` | Serveri port | `3000` |

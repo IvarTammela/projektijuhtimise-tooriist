@@ -4,6 +4,9 @@
 // Provider valitakse keskkonnamuutujaga AI_PROVIDER: "anthropic" (vaikimisi, kui võti on olemas),
 // "mock" (deterministlikud vastused testimiseks) või "none" (AI pole seadistatud).
 
+const { spawn } = require("child_process");
+const os = require("os");
+
 const PROMPTS = {
   questions: 'Oled projektijuht. Kliendi idee on umbmäärane. Esita 1–3 täpsustavat küsimust, igaühele 2–4 vastusevarianti. Vasta ainult JSON-iga: {"message": string, "questions": [{"text": string, "options": [string]}]}.',
   roles: 'Pakkusid kasutajarollid projektile. Roll on translatiivis (nt "külastajana", "klubi liikmena"). Vasta ainult JSON-iga: {"message": string, "roles": [string]}.',
@@ -55,6 +58,28 @@ async function callAnthropic(system, userText) {
   }
   const body = await res.json();
   return body.content.map((block) => block.text || '').join('');
+}
+
+// Claude Code käsurea provider: kasutab kasutaja enda sisselogitud Claude Code’i, API võtit pole vaja.
+// Töötab tühjas ajutises kaustas ja ilma tööriistadeta, mudelile antakse ainult tekst.
+function callClaudeCli(system, userText) {
+  return new Promise((resolve, reject) => {
+    const args = ["-p", "--no-session-persistence", "--disallowedTools", "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch"];
+    if (process.env.AI_MODEL) args.push("--model", process.env.AI_MODEL);
+    const child = spawn("claude", args, { cwd: os.tmpdir(), shell: process.platform === "win32", windowsHide: true });
+    let out = "";
+    let err = "";
+    const timer = setTimeout(() => { child.kill(); reject(new AiUnavailableError("Claude Code ei vastanud 2 minuti jooksul.")); }, 120000);
+    child.stdout.on("data", (d) => { out += d; });
+    child.stderr.on("data", (d) => { err += d; });
+    child.on("error", () => { clearTimeout(timer); reject(new AiUnavailableError("Claude Code käsurida ei leitud.")); });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0) return reject(new AiUnavailableError("Claude Code vastas veaga: " + err.slice(0, 200)));
+      resolve(out);
+    });
+    child.stdin.end(`${system}\n\n${userText}`);
+  });
 }
 
 // Mock-vastused: fikseeritud näited, et saaks rakendust testida ilma võtmeta.
@@ -134,6 +159,10 @@ async function askAI(task, context) {
   }
   if (provider === 'mock') {
     return MOCK[task](context);
+  }
+  if (provider === "claude-cli") {
+    const text = await callClaudeCli(system, `Kontekst (JSON):\n${JSON.stringify(context, null, 2)}`);
+    return extractJson(text);
   }
   if (provider === 'anthropic') {
     const userText = JSON.stringify(context, null, 2);
