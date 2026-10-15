@@ -61,7 +61,7 @@ function serveStatic(req, res, pathname) {
     res.writeHead(404);
     return res.end('Ei leitud');
   }
-  res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream' });
+  res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-store' });
   fs.createReadStream(file).pipe(res);
 }
 
