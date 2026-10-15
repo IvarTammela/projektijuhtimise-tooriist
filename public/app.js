@@ -152,6 +152,11 @@ function render() {
     chat.scrollTop = wasAtBottom ? chat.scrollHeight : oldChatTop;
   }
   window.scrollTo(0, oldPageTop);
+  // Kui AI ootab vastust, on kursor valmis kirjutama.
+  if (pendingQuestionnaire(v) && !state.busy && document.activeElement === document.body) {
+    const box = document.querySelector('#chat-input');
+    if (box) box.focus({ preventScroll: true });
+  }
 }
 
 function renderStageBar(v) {
@@ -192,7 +197,7 @@ function renderChat(v) {
     onclick: () => run(async () => runStep(v, step)),
   }, step.label)));
 
-  const textarea = el('textarea', { id: 'chat-input', rows: 2, placeholder: v.description ? 'Kirjuta vabalt (kliendi vastus, täpsustus, küsimus)' : 'Kirjelda oma idee…' });
+  const textarea = el('textarea', { id: 'chat-input', rows: 2, placeholder: !v.description ? 'Kirjelda oma idee…' : pendingQuestionnaire(v) ? 'Kirjuta, mida klient vastas…' : 'Kirjuta vabalt (kliendi vastus, täpsustus, küsimus)' });
   const sendBtn = el('button', {
     class: 'primary',
     disabled: state.busy,
@@ -352,12 +357,10 @@ function renderProposal(v, p) {
     if (idx !== -1) {
       const q = d.questions[idx];
       body.push(el('div', { class: 'msg ai' }, q.text));
+      // Küsimustel ei ole vastusevariante: projektijuht kirjutab ise, mida klient vastas.
+      // Variandid kuvatakse ainult siis, kui AI need siiski annab.
       body.push(el('div', { class: 'chips' }, [
-        ...q.options.map((o) => el('button', { disabled: state.busy, onclick: () => answerQuestion(v, p, d, idx, o) }, o)),
-        el('button', { disabled: state.busy, onclick: () => {
-          const box = document.querySelector('#chat-input');
-          if (box) { box.placeholder = 'Kirjuta oma vastus ja vajuta Saada'; box.focus(); }
-        } }, 'Muu (kirjutan ise)'),
+        ...(q.options || []).map((o) => el('button', { disabled: state.busy, onclick: () => answerQuestion(v, p, d, idx, o) }, o)),
         el('button', { disabled: state.busy, onclick: () => answerQuestion(v, p, d, idx, '(vahele jäetud)') }, 'Jäta vahele'),
       ]));
     }
