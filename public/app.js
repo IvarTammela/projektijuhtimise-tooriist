@@ -130,7 +130,7 @@ function render() {
   }
   const v = state.view;
   // Uuesti joonistamine asendab kogu DOM-i, seega jätame vestluse ja lehe kerimisasukoha meelde.
-  const oldChat = document.querySelector('.layout > .panel:first-child');
+  const oldChat = document.querySelector('.chat-scroll');
   const wasAtBottom = !oldChat || oldChat.scrollTop + oldChat.clientHeight >= oldChat.scrollHeight - 80;
   const oldChatTop = oldChat ? oldChat.scrollTop : 0;
   const oldPageTop = window.scrollY;
@@ -147,7 +147,7 @@ function render() {
   ].filter(Boolean));
 
   // Kui kasutaja oli vestluse lõpus, järgime uut sisu. Kui ta kerib ülal, jääb asukoht samaks.
-  const chat = document.querySelector('.layout > .panel:first-child');
+  const chat = document.querySelector('.chat-scroll');
   if (chat) {
     chat.scrollTop = wasAtBottom ? chat.scrollHeight : oldChatTop;
   }
@@ -224,14 +224,16 @@ function renderChat(v) {
     },
   }, 'Saada');
 
-  return el('div', { class: 'panel' }, [
+  // Vestlus on kahes osas: ülemine osa kerib, sisestuskast jääb alati alla nähtavale.
+  return el('div', { class: 'panel chat-panel' }, [
     el('h3', {}, 'Juhitud vestlus'),
-    el('div', {}, messages.length ? messages : [el('p', { class: 'muted' }, 'Alusta järgmise sammuga.')]),
-    ...proposals,
-    state.thinking ? el('div', { class: 'msg ai thinking' }, 'AI mõtleb…') : null,
-    steps.length ? el('h3', {}, 'Järgmine samm') : null,
-    next,
-    el('div', { class: 'row' }, [textarea, sendBtn]),
+    el('div', { class: 'chat-scroll' }, [
+      ...messages,
+      ...proposals,
+      state.thinking ? el('div', { class: 'msg ai thinking' }, 'AI mõtleb…') : null,
+      steps.length ? next : null,
+    ]),
+    el('div', { class: 'chat-input-row' }, [textarea, sendBtn]),
   ]);
 }
 
