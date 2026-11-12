@@ -207,3 +207,22 @@ test('mockup’i varasem versioon taastatakse uue versioonina ja ajalugu säilib
   assert.equal(m.versions.length, 3, 'vana ajalugu säilib');
   assert.equal(m.versions[2].root.label, m.versions[0].root.label, 'taastatud versioon on uus viimane');
 });
+
+test('prioriteedi kinnitamine nummerdab lood järjekorra järgi', async () => {
+  const project = service.createProject({ name: 'Klubi', description: 'Spordiklubi veeb' });
+  const stories = await service.propose(project, 'stories', {});
+  service.apply(project, stories.id, {});
+  const priority = await service.propose(project, 'priority', {});
+  const reversed = project.stories.map((s) => s.id).reverse();
+  service.apply(project, priority.id, { order: reversed });
+
+  const v = service.view(project);
+  assert.deepEqual(v.stories.map((s) => s.id), reversed);
+  assert.deepEqual(v.stories.map((s) => s.code), ['US-1', 'US-2', 'US-3', 'US-4']);
+
+  // Uus lugu jätkab numeratsiooni, käsitsi järjestamine koode ei muuda.
+  service.addStoryManually(project, { role: 'külastajana', action: 'näha kontakte', benefit: 'võtta ühendust' });
+  assert.equal(service.view(project).stories[4].code, 'US-5');
+  service.setOrder(project, [...reversed.slice(1), reversed[0], project.stories[4].id]);
+  assert.equal(service.view(project).stories[0].code, 'US-2');
+});

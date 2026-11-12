@@ -353,6 +353,9 @@ function apply(project, proposalId, edited = {}) {
     case 'priority': {
       const map = new Map(project.stories.map((s) => [s.id, s]));
       project.stories = payload.order.map((x) => map.get(x));
+      // Koodid (US-1, US-2 …) järgivad kinnitatud prioriteeti. Hilisem käsitsi järjestamine koode ei muuda.
+      project.stories.forEach((s, i) => { s.seq = i + 1; });
+      project.nextSeq = project.stories.length;
       break;
     }
     case 'criteria':
