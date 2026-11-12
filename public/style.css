@@ -125,6 +125,9 @@ td, th { border-bottom: 1px solid var(--border); padding: 6px 4px; text-align: l
 .crit-list li { color: var(--ok); padding: 2px 0; }
 .crit-list li::before { content: '+ '; font-weight: 700; }
 .crit-list input[type="text"] { width: calc(100% - 40px); }
+.story-crit { margin: 0; padding-left: 20px; }
+.story-crit li { padding: 2px 0; }
+.story-actions .label { margin-top: 0; }
 .row.actions { justify-content: flex-end; margin-top: 10px; }
 
 /* Järgmise sammu nupud on ümarad */

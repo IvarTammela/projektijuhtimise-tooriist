@@ -532,8 +532,13 @@ function renderBacklog(v) {
       el('span', { class: 'chip' }, s.status),
       s.mvp ? el('span', { class: 'chip mvp-chip' }, 'MVP') : null,
       el('span', { class: 'chip' }, s.origin === 'Käsitsi' ? 'Käsitsi' : 'AI'),
+      el('span', { class: 'chip' }, s.criteria.length === 1 ? '1 kriteerium' : `${s.criteria.length} kriteeriumi`),
     ]);
     const actions = selected ? el('div', { class: 'story-actions' }, [
+      el('div', { class: 'label' }, 'VASTUVÕTUKRITEERIUMID'),
+      s.criteria.length
+        ? el('ol', { class: 'story-crit' }, s.criteria.map((c) => el('li', {}, c.text)))
+        : el('p', { class: 'muted' }, 'Kriteeriume ei ole veel.'),
       el('div', { class: 'row' }, [
         el('button', { disabled: i === 0 || state.busy, onclick: (e) => { e.stopPropagation(); api2('PUT', '/order', { order: moved(v.stories, i, -1).map((x) => x.id) }); } }, '▲'),
         el('button', { disabled: i === v.stories.length - 1 || state.busy, onclick: (e) => { e.stopPropagation(); api2('PUT', '/order', { order: moved(v.stories, i, 1).map((x) => x.id) }); } }, '▼'),
